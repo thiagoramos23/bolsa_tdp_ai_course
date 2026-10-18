@@ -1,0 +1,33 @@
+service: bolsa
+minimum_version: 2.11.0
+image: thiagoramos23/bolsa
+servers:
+  web:
+    - 178.104.212.36
+proxy:
+  ssl: true
+  forward_headers: true
+  host: bolsa.thiagoramos.me
+  app_port: 3007
+  healthcheck:
+    path: /up
+    interval: 3
+    timeout: 3
+registry:
+  username: thiagoramos23
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+builder:
+  arch: amd64
+  remote: ssh://root@178.104.212.36
+env:
+  clear:
+    NODE_ENV: production
+    PORT: 3007
+    APP_URL: https://bolsa.thiagoramos.me
+    TRUST_PROXY: 1
+  secret:
+    - DATABASE_URL
+aliases:
+  shell: app exec --interactive "/bin/bash"
+  logs: app logs -f

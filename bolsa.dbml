@@ -1,0 +1,117 @@
+Project negociacoes_bolsa {
+  database_type: 'PostgreSQL'
+  Note: '''
+  Modelo lógico — TDP: Negociações na Bolsa de Valores.
+  Cada negociação registra uma operação de um investidor sobre uma ação.
+  Cada vínculo filho exige exatamente um pai; cada pai pode ter zero ou muitos filhos.
+  Premissa: ticker identifica a ação; uma empresa pode emitir várias ações.
+  Simulador sem login: investidor de demonstração com R$ 10.000 iniciais.
+  Worker controlado por botão: gravar cotação a cada 5 segundos enquanto ativo.
+  Simulação começa pausada e expira após 60 segundos sem uma tela visível.
+  '''
+}
+
+Table investidor [headercolor: #2563eb] {
+  id_investidor bigint [pk, increment]
+  cpf_cnpj varchar(14) [not null, unique, note: 'Sem pontuação. Validar formato e dígitos verificadores na aplicação.']
+  nome_completo varchar(200) [not null]
+  tipo_investidor varchar(2) [not null, note: 'PF = pessoa física; PJ = pessoa jurídica.']
+  email varchar(254) [not null]
+  telefone varchar(20) [not null]
+  saldo_inicial numeric(18,2) [not null, default: 10000.00, note: 'Dinheiro fictício inicial. Saldo disponível calculado pela view saldo_financeiro no DDL.']
+
+  checks {
+    `saldo_inicial >= 0` [name: 'ck_saldo_inicial']
+    `tipo_investidor IN ('PF', 'PJ')` [name: 'ck_tipo_investidor']
+    `(tipo_investidor = 'PF' AND char_length(cpf_cnpj) = 11) OR (tipo_investidor = 'PJ' AND char_length(cpf_cnpj) = 14)` [name: 'ck_documento_tipo']
+  }
+}
+
+Table empresa [headercolor: #7c3aed] {
+  id_empresa bigint [pk, increment]
+  nome_empresa varchar(200) [not null]
+  setor_atuacao varchar(100) [not null]
+  valor_mercado numeric(20,2) [not null]
+
+  checks {
+    `valor_mercado >= 0` [name: 'ck_valor_mercado']
+  }
+}
+
+Table acao [headercolor: #7c3aed] {
+  id_acao bigint [pk, increment]
+  id_empresa bigint [not null]
+  ticker varchar(20) [not null, unique]
+}
+
+Table negociacao [headercolor: #059669] {
+  id_negociacao bigint [pk, increment]
+  id_requisicao uuid [not null, unique, default: `gen_random_uuid()`, note: 'Impede duplicação da mesma compra ou venda em tentativas de envio.']
+  id_investidor bigint [not null]
+  id_acao bigint [not null]
+  data_hora timestamptz [not null]
+  tipo_operacao varchar(6) [not null]
+  quantidade_acoes bigint [not null]
+  valor_unitario numeric(18,6) [not null, note: 'Preço efetivo da operação, preservado mesmo se a cotação mudar.']
+
+  checks {
+    `tipo_operacao IN ('COMPRA', 'VENDA')` [name: 'ck_tipo_operacao']
+    `quantidade_acoes > 0` [name: 'ck_quantidade_negociada']
+    `valor_unitario > 0` [name: 'ck_valor_unitario']
+  }
+
+  indexes {
+    (id_investidor, id_acao, data_hora)
+  }
+
+  Note: 'A API insere a negociação e atualiza a posição na mesma transação, validando dinheiro e quantidade. Ao alterar ou excluir por SQL, manter posição e saldo coerentes.'
+}
+
+Table historico_cotacao [headercolor: #d97706] {
+  id_cotacao bigint [pk, increment]
+  id_acao bigint [not null]
+  data_hora timestamptz [not null]
+  valor_cotacao numeric(18,6) [not null]
+
+  checks {
+    `valor_cotacao > 0` [name: 'ck_valor_cotacao']
+  }
+
+  indexes {
+    (id_acao, data_hora)
+  }
+
+  Note: 'Para avaliar a carteira em um instante, calcular a posição pelas negociações até esse instante e usar a última cotação disponível até ele. Sem cotação anterior, o valor é desconhecido, não zero.'
+}
+
+Table posicao_carteira [headercolor: #0891b2] {
+  id_carteira bigint [pk, increment]
+  id_investidor bigint [not null]
+  id_acao bigint [not null]
+  quantidade_acoes bigint [not null, default: 0]
+  data_atualizacao timestamptz [not null]
+
+  indexes {
+    (id_investidor, id_acao) [unique, name: 'uq_posicao_investidor_acao']
+  }
+
+  Note: 'Uma posição por investidor e ação. Saldo atual = compras - vendas desde a posição inicial zero. A API impede vender mais ações do que o investidor possui. Não substitui o histórico de negociações.'
+}
+
+Ref emite: acao.id_empresa > empresa.id_empresa [delete: restrict]
+Ref realiza: negociacao.id_investidor > investidor.id_investidor [delete: restrict]
+Ref envolve: negociacao.id_acao > acao.id_acao [delete: restrict]
+Ref tem_cotacao: historico_cotacao.id_acao > acao.id_acao [delete: restrict]
+Ref possui: posicao_carteira.id_investidor > investidor.id_investidor [delete: restrict]
+Ref compoe: posicao_carteira.id_acao > acao.id_acao [delete: restrict]
+
+Table simulacao [headercolor: #64748b] {
+  id smallint [pk, default: 1]
+  ativa boolean [not null, default: false]
+  ultimo_contato timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  checks {
+    `id = 1` [name: 'ck_simulacao_unica']
+  }
+  Note: 'Estado operacional compartilhado. Começa pausado; botão inicia ou pausa. Expira após 60 segundos sem contato de uma tela visível.'
+}
+

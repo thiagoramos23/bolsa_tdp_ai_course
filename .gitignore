@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.kamal/secrets
+.DS_Store
+*.log
+.qa/
+.remember/
+*.zip

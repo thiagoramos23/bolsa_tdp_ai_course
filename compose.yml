@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bolsa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: bolsa-local
+    ports:
+      - "127.0.0.1:5436:5432"
+    volumes:
+      - bolsa-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bolsa"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  bolsa-data:

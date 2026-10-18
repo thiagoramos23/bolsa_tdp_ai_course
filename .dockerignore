@@ -1,0 +1,11 @@
+node_modules
+dist
+.env*
+.kamal
+.git
+.qa
+test
+docs/design
+.remember
+*.zip
+*.log
